@@ -32,3 +32,29 @@ CREATE TABLE IF NOT EXISTS analysis_runs (
 
 CREATE INDEX IF NOT EXISTS idx_analysis_runs_symbol_created
 ON analysis_runs(symbol, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS ai_reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  scope TEXT NOT NULL,
+  symbol TEXT,
+  model TEXT,
+  prompt_hash TEXT,
+  report TEXT NOT NULL,
+  source_json TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_reports_scope_symbol_created
+ON ai_reports(scope, symbol, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS system_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  message TEXT,
+  metadata_json TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_system_events_type_created
+ON system_events(event_type, created_at DESC);

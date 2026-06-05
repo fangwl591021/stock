@@ -1,6 +1,6 @@
-# 股市分析 Worker 工具
+# 股市分析 Worker 平台
 
-第一版 MVP：使用 Cloudflare Worker + D1 建立自選股與簡單技術分析工具。
+使用 Cloudflare Worker + D1 建立可部署、可維護的股市分析平台。
 
 ## 功能
 
@@ -10,6 +10,11 @@
 - 計算 MA5、MA20、MA60、RSI14、MACD、量能比
 - 產生 0-100 分與偏多 / 中性 / 偏弱摘要
 - 將分析紀錄寫入 D1
+- 批次分析全部自選股
+- 單股明細與近 90 日收盤線圖
+- AI 總覽報告與單股報告
+- 系統事件紀錄
+- Cloudflare scheduled trigger 自動分析
 
 ## 檔案
 
@@ -59,6 +64,55 @@ npm run dev
 npm run deploy
 ```
 
+目前 live URL：
+
+```text
+https://stock.fangwl591021.workers.dev/
+```
+
+## OpenAI AI 報告
+
+Cloudflare Worker 需要有 secret：
+
+```text
+OPENAI_API_KEY
+```
+
+如果 health API 顯示 `hasOpenAI:false`，請到 Cloudflare Worker 的「變數和祕密」確認名稱是否完全等於 `OPENAI_API_KEY`。不要在名稱前後多空白。
+
+可選模型設定：
+
+```text
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+若未設定 `OPENAI_MODEL`，Worker 預設使用 `gpt-4.1-mini`。
+
+## 排程
+
+`wrangler.toml` 已設定：
+
+```toml
+[triggers]
+crons = ["10 23 * * 1-5"]
+```
+
+這代表 UTC 週一到週五 23:10 執行，約等於台灣時間週二到週六 07:10。用途是每天早上自動更新自選股技術分析。
+
+## API
+
+- `GET /api/dashboard`
+- `GET /api/stocks`
+- `POST /api/stocks`
+- `DELETE /api/stocks/:symbol`
+- `POST /api/analyze`
+- `POST /api/analyze-all`
+- `GET /api/analysis/:symbol`
+- `GET /api/candles/:symbol`
+- `POST /api/ai-report`
+- `GET /api/ai-report`
+- `GET /api/events`
+
 ## 注意
 
-這是分析工具，不是投資建議。Yahoo Finance 來源適合第一版驗證，正式產品應補上資料快取、錯誤重試、資料來源備援與權限控管。
+這是分析工具，不是投資建議。Yahoo Finance 來源適合第一版驗證，正式產品應補上資料快取、錯誤重試、資料來源備援、權限控管與更完整的基本面/籌碼資料。
