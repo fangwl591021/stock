@@ -1,0 +1,16 @@
+{
+  "name": "stock-analysis-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create stock-analysis-db",
+    "db:migrate:local": "wrangler d1 execute stock-analysis-db --local --file=./schema.sql",
+    "db:migrate:remote": "wrangler d1 execute stock-analysis-db --remote --file=./schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4.20.0"
+  }
+}

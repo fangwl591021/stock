@@ -1,0 +1,8 @@
+name = "stock-analysis-worker"
+main = "src/worker.js"
+compatibility_date = "2025-12-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "stock-analysis-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
