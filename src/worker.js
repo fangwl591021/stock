@@ -983,7 +983,7 @@ const INDEX_HTML = `<!doctype html>
     .top-actions, .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .grid { display: grid; gap: 14px; }
     .stats { grid-template-columns: 1fr 1fr; margin-bottom: 14px; }
-    .layout { grid-template-columns: minmax(0, 1.3fr) minmax(360px, .7fr); align-items: start; }
+    .layout { grid-template-columns: minmax(0, 1fr) 420px; align-items: start; }
     .panel, .stat {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -1062,6 +1062,8 @@ const INDEX_HTML = `<!doctype html>
       border-radius: 8px;
       padding: 12px;
       min-height: 160px;
+      max-height: calc(100vh - 190px);
+      overflow: auto;
     }
     .detail {
       display: grid;
@@ -1103,31 +1105,19 @@ const INDEX_HTML = `<!doctype html>
       background: var(--accent);
       color: #fff;
     }
-    .drawer-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(15, 23, 42, .28);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity .18s ease;
-      z-index: 40;
-    }
-    .drawer-backdrop.open {
-      opacity: 1;
-      pointer-events: auto;
-    }
+    .drawer-backdrop { display: none; }
     .teacher-drawer {
       position: fixed;
       top: 0;
       left: 300px;
-      width: min(520px, calc(100vw - 300px));
+      width: 360px;
       height: 100vh;
       background: #fff;
       border-right: 1px solid var(--line);
-      box-shadow: 16px 0 36px rgba(15, 23, 42, .18);
-      transform: translateX(-110%);
+      box-shadow: 12px 0 28px rgba(15, 23, 42, .14);
+      transform: translateX(-100%);
       transition: transform .2s ease;
-      z-index: 50;
+      z-index: 30;
       padding: 18px;
       overflow-y: auto;
     }
@@ -1151,7 +1141,8 @@ const INDEX_HTML = `<!doctype html>
       .stats, .layout, .detail { grid-template-columns: 1fr; }
       .teacher-drawer {
         left: 0;
-        width: min(92vw, 520px);
+        width: min(92vw, 360px);
+        z-index: 60;
       }
       form { grid-template-columns: 1fr; }
       header { align-items: flex-start; flex-direction: column; }
@@ -1315,7 +1306,6 @@ const INDEX_HTML = `<!doctype html>
 
     function openTeacherDrawer(key) {
       const drawer = document.querySelector("#teacher-drawer");
-      const backdrop = document.querySelector("#drawer-backdrop");
       const title = document.querySelector("#drawer-title");
       const subtitle = document.querySelector("#drawer-subtitle");
       const content = document.querySelector("#drawer-content");
@@ -1347,12 +1337,10 @@ const INDEX_HTML = `<!doctype html>
       }
 
       drawer.classList.add("open");
-      backdrop.classList.add("open");
     }
 
     function closeTeacherDrawer() {
       document.querySelector("#teacher-drawer").classList.remove("open");
-      document.querySelector("#drawer-backdrop").classList.remove("open");
     }
 
     async function createJensenReport() {
@@ -1363,7 +1351,6 @@ const INDEX_HTML = `<!doctype html>
       });
       document.querySelector("#report").textContent = data.report;
       document.querySelector("#ai-state").textContent = "名人老師追蹤：黃仁勳 / 模型：" + data.model + " / web search：" + (data.usedWebSearch ? "已啟用" : "未啟用") + " / sources：" + (data.sources?.length || 0);
-      closeTeacherDrawer();
       clearBusy();
     }
 
