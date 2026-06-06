@@ -955,7 +955,7 @@ const INDEX_HTML = `<!doctype html>
     main { padding: 20px; }
     .app-shell {
       display: grid;
-      grid-template-columns: 300px minmax(0, 1fr);
+      grid-template-columns: 260px minmax(0, 1fr);
       min-height: 100vh;
     }
     .sidebar {
@@ -974,6 +974,24 @@ const INDEX_HTML = `<!doctype html>
       gap: 8px;
       margin: 16px 0;
     }
+    .nav-button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: transparent;
+      color: var(--text);
+      border: 1px solid transparent;
+      text-align: left;
+    }
+    .nav-button:hover {
+      background: #eef2f6;
+      color: var(--text);
+    }
+    .nav-button.active {
+      background: var(--accent);
+      color: #fff;
+    }
     .content {
       min-width: 0;
       max-width: 1320px;
@@ -982,8 +1000,10 @@ const INDEX_HTML = `<!doctype html>
     }
     .top-actions, .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .grid { display: grid; gap: 14px; }
-    .stats { grid-template-columns: 1fr 1fr; margin-bottom: 14px; }
+    .stats { grid-template-columns: repeat(6, minmax(120px, 1fr)); margin-bottom: 14px; }
     .layout { grid-template-columns: minmax(0, 1fr) 420px; align-items: start; }
+    .view-section { display: none; }
+    .view-section.active { display: block; }
     .panel, .stat {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -1109,13 +1129,13 @@ const INDEX_HTML = `<!doctype html>
     .teacher-drawer {
       position: fixed;
       top: 0;
-      left: 300px;
-      width: 360px;
+      left: 260px;
+      width: 280px;
       height: 100vh;
       background: #fff;
       border-right: 1px solid var(--line);
       box-shadow: 12px 0 28px rgba(15, 23, 42, .14);
-      transform: translateX(-100%);
+      transform: translateX(-102%);
       transition: transform .2s ease;
       z-index: 30;
       padding: 18px;
@@ -1164,24 +1184,14 @@ const INDEX_HTML = `<!doctype html>
   <div class="app-shell">
     <aside class="sidebar">
       <h1>股市分析平台</h1>
-      <div class="muted">左側儀表板，右側顯示內容。資料僅供研究，不構成投資建議。</div>
+      <div class="muted">LINE OA 式後台。左側選功能，右側顯示內容。</div>
 
       <div class="sidebar-actions">
-        <button onclick="analyzeAll()">批次分析全部</button>
-        <button class="secondary" onclick="createPortfolioReport()">產生總覽 AI 報告</button>
-        <button class="secondary" onclick="loadDashboard()">重新整理</button>
+        <button class="nav-button" id="nav-celebrity" onclick="showView('celebrity')"><span>名人專區</span><span>›</span></button>
+        <button class="nav-button active" id="nav-stocks" onclick="showView('stocks')"><span>自選股</span><span>›</span></button>
+        <button class="nav-button" id="nav-ai-picks" onclick="showView('ai-picks')"><span>AI推薦股</span><span>›</span></button>
       </div>
-
-      <section class="grid stats" id="stats"></section>
-
-      <section class="panel">
-        <h2>名人老師追蹤</h2>
-        <div class="muted">點選人物後，向右打開追蹤抽屜。</div>
-        <div class="teacher-list">
-          <button class="teacher-item primary" onclick="openTeacherDrawer('jensen')"><span>黃仁勳</span><span>›</span></button>
-          <button class="teacher-item" onclick="openTeacherDrawer('placeholder')"><span>XXX</span><span>›</span></button>
-        </div>
-      </section>
+      <div class="muted">資料僅供研究，不構成投資建議。</div>
     </aside>
 
     <div class="drawer-backdrop" id="drawer-backdrop" onclick="closeTeacherDrawer()"></div>
@@ -1199,6 +1209,26 @@ const INDEX_HTML = `<!doctype html>
     <main class="content">
       <p class="status" id="status"></p>
 
+      <section class="view-section" id="view-celebrity">
+        <section class="panel" style="margin-bottom:14px;">
+          <h2>名人專區</h2>
+          <div class="muted">左側選單右邊會打開名人老師抽屜。選黃仁勳後，可追蹤新聞、拜訪廠家與 NVIDIA/AI 概念股。</div>
+        </section>
+        <section class="grid layout">
+          <div class="panel">
+            <h2>追蹤結果</h2>
+            <div class="muted" id="celebrity-state">請先從左側抽屜選擇名人老師。</div>
+            <div class="report" id="celebrity-report">尚未產生追蹤報告。</div>
+          </div>
+          <aside class="panel">
+            <h2>操作提示</h2>
+            <div class="muted">目前已建立黃仁勳追蹤。XXX 是下一位名人老師預留模板。</div>
+          </aside>
+        </section>
+      </section>
+
+      <section class="view-section active" id="view-stocks">
+      <section class="grid stats" id="stats"></section>
       <section class="grid layout">
       <div class="panel">
         <h2>自選股工作台</h2>
@@ -1232,12 +1262,34 @@ const INDEX_HTML = `<!doctype html>
         <div id="events"></div>
       </aside>
     </section>
+      </section>
+
+      <section class="view-section" id="view-ai-picks">
+        <section class="grid stats" id="ai-pick-stats"></section>
+        <section class="grid layout">
+          <div class="panel">
+            <h2>AI推薦股</h2>
+            <div class="muted">根據目前自選股的技術分數、趨勢與 AI 報告，整理偏強、觀察、風險名單。</div>
+            <div class="actions" style="margin:12px 0;">
+              <button onclick="createPortfolioReport()">產生 AI 推薦報告</button>
+              <button class="secondary" onclick="analyzeAll()">先批次分析全部</button>
+            </div>
+            <div id="ai-picks"></div>
+          </div>
+          <aside class="panel">
+            <h2>AI推薦報告</h2>
+            <div class="muted" id="ai-pick-state">尚未產生推薦報告。</div>
+            <div class="report" id="ai-pick-report">按「產生 AI 推薦報告」後，這裡會顯示內容。</div>
+          </aside>
+        </section>
+      </section>
     </main>
   </div>
 
   <script>
     let dashboard = null;
     let selectedSymbol = null;
+    let currentView = "stocks";
 
     document.querySelector("#stock-form").addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1259,9 +1311,24 @@ const INDEX_HTML = `<!doctype html>
       dashboard = await api("/api/dashboard");
       renderStats(dashboard.stats);
       renderStocks(dashboard.stocks || []);
+      renderAiPicks(dashboard);
       renderReport(dashboard.latestReport, dashboard.stats.hasOpenAI);
       renderEvents(dashboard.events || []);
       clearBusy();
+    }
+
+    function showView(view) {
+      currentView = view;
+      document.querySelectorAll(".view-section").forEach((section) => section.classList.remove("active"));
+      document.querySelector("#view-" + view).classList.add("active");
+      document.querySelectorAll(".nav-button").forEach((button) => button.classList.remove("active"));
+      document.querySelector("#nav-" + view).classList.add("active");
+
+      if (view === "celebrity") {
+        openTeacherDrawer("menu");
+      } else {
+        closeTeacherDrawer();
+      }
     }
 
     async function analyze(symbol) {
@@ -1288,8 +1355,10 @@ const INDEX_HTML = `<!doctype html>
         method: "POST",
         body: JSON.stringify({ scope: "portfolio" })
       });
-      document.querySelector("#report").textContent = data.report;
-      document.querySelector("#ai-state").textContent = "模型：" + data.model;
+      const targetReport = currentView === "ai-picks" ? "#ai-pick-report" : "#report";
+      const targetState = currentView === "ai-picks" ? "#ai-pick-state" : "#ai-state";
+      document.querySelector(targetReport).textContent = data.report;
+      document.querySelector(targetState).textContent = "模型：" + data.model;
       clearBusy();
     }
 
@@ -1299,8 +1368,10 @@ const INDEX_HTML = `<!doctype html>
         method: "POST",
         body: JSON.stringify({ scope: "symbol", symbol })
       });
-      document.querySelector("#report").textContent = data.report;
-      document.querySelector("#ai-state").textContent = "模型：" + data.model + " / " + symbol;
+      const targetReport = currentView === "ai-picks" ? "#ai-pick-report" : "#report";
+      const targetState = currentView === "ai-picks" ? "#ai-pick-state" : "#ai-state";
+      document.querySelector(targetReport).textContent = data.report;
+      document.querySelector(targetState).textContent = "模型：" + data.model + " / " + symbol;
       clearBusy();
     }
 
@@ -1310,6 +1381,15 @@ const INDEX_HTML = `<!doctype html>
       const subtitle = document.querySelector("#drawer-subtitle");
       const content = document.querySelector("#drawer-content");
 
+      if (key === "menu") {
+        title.textContent = "名人老師追蹤";
+        subtitle.textContent = "選擇一位名人老師";
+        content.innerHTML =
+          '<div class="teacher-list">' +
+            '<button class="teacher-item primary" onclick="openTeacherDrawer(\\'jensen\\')"><span>黃仁勳</span><span>›</span></button>' +
+            '<button class="teacher-item" onclick="openTeacherDrawer(\\'placeholder\\')"><span>XXX</span><span>›</span></button>' +
+          '</div>';
+      } else
       if (key === "jensen") {
         title.textContent = "黃仁勳";
         subtitle.textContent = "NVIDIA、AI 供應鏈、拜訪廠家、概念股追蹤";
@@ -1349,8 +1429,9 @@ const INDEX_HTML = `<!doctype html>
         method: "POST",
         body: "{}"
       });
-      document.querySelector("#report").textContent = data.report;
-      document.querySelector("#ai-state").textContent = "名人老師追蹤：黃仁勳 / 模型：" + data.model + " / web search：" + (data.usedWebSearch ? "已啟用" : "未啟用") + " / sources：" + (data.sources?.length || 0);
+      showView("celebrity");
+      document.querySelector("#celebrity-report").textContent = data.report;
+      document.querySelector("#celebrity-state").textContent = "黃仁勳 / 模型：" + data.model + " / web search：" + (data.usedWebSearch ? "已啟用" : "未啟用") + " / sources：" + (data.sources?.length || 0);
       clearBusy();
     }
 
@@ -1439,6 +1520,26 @@ const INDEX_HTML = `<!doctype html>
       document.querySelector("#stats").innerHTML = cards.map(([label, value]) =>
         '<div class="stat"><div class="label">' + label + '</div><div class="value">' + value + '</div></div>'
       ).join("");
+      document.querySelector("#ai-pick-stats").innerHTML = document.querySelector("#stats").innerHTML;
+    }
+
+    function renderAiPicks(data) {
+      const leaders = data.leaders || [];
+      const risks = data.risks || [];
+
+      const leaderRows = leaders.map((stock) =>
+        '<tr><td data-label="股票"><strong>' + escapeHtml(stock.symbol) + '</strong><div class="muted">' + escapeHtml(stock.name || "") + '</div></td><td data-label="分數"><span class="badge ' + classForTrend(stock.trend) + '">' + (stock.score ?? "-") + '</span></td><td data-label="理由">' + escapeHtml(stock.summary || "") + '</td><td data-label="操作"><button class="secondary" onclick="createSymbolReport(\\'' + escapeJs(stock.symbol) + '\\')">AI</button></td></tr>'
+      ).join("");
+
+      const riskRows = risks.map((stock) =>
+        '<tr><td data-label="股票"><strong>' + escapeHtml(stock.symbol) + '</strong><div class="muted">' + escapeHtml(stock.name || "") + '</div></td><td data-label="分數"><span class="badge ' + classForTrend(stock.trend) + '">' + (stock.score ?? "-") + '</span></td><td data-label="理由">' + escapeHtml(stock.summary || "") + '</td><td data-label="操作"><button class="secondary" onclick="createSymbolReport(\\'' + escapeJs(stock.symbol) + '\\')">AI</button></td></tr>'
+      ).join("");
+
+      document.querySelector("#ai-picks").innerHTML =
+        '<h2>偏強觀察</h2>' +
+        '<table><thead><tr><th>股票</th><th>分數</th><th>理由</th><th>操作</th></tr></thead><tbody>' + leaderRows + '</tbody></table>' +
+        '<h2 style="margin-top:16px;">風險觀察</h2>' +
+        '<table><thead><tr><th>股票</th><th>分數</th><th>理由</th><th>操作</th></tr></thead><tbody>' + riskRows + '</tbody></table>';
     }
 
     function renderStocks(stocks) {
