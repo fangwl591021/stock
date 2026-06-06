@@ -515,7 +515,10 @@ async function buildAiPicksPayload() {
       "請用繁體中文產出「AI推薦股」觀察報告。",
       "不要限定使用者目前自選股；但只能從 input.candidates 裡挑選股票，不得自行新增不在清單內的股票。",
       "input.candidates 的 price 與 bucket 已由系統用行情資料驗證，請以這些欄位為準，不要自行猜股價或改分類。",
-      "請使用 web search 補充候選股的最新新聞、財報、產業趨勢與催化因素，但價格區間必須以 input.candidates 為準。",
+      "請使用 web search 補充候選股的最新新聞、財報、產業趨勢、券商/法人觀點、股市新聞台與股市雜誌分析，但價格區間必須以 input.candidates 為準。",
+      "請綜合多來源，不只用 AI 自己判斷。優先搜尋並交叉比對：Yahoo股市、鉅亨網、MoneyDJ、工商時報、經濟日報、中央社、財訊、今周刊、Smart智富、CMoney、非凡財經、三立/東森/民視財經新聞、公開資訊觀測站與公司法說/財報。",
+      "請在 AI補充觀察中列出「來源綜合方式」：哪些來源支持該股、哪些來源只是新聞提及、哪些是市場解讀或雜誌觀點。不要把單一來源包裝成共識。",
+      "若某檔股票只有 AI 技術分數支持、缺少外部新聞/媒體/法人來源，請標示為「技術面候選，外部來源不足」。",
       "這不是個人化投資建議；請以研究觀察名單方式輸出，避免保證獲利或直接下買賣指令。",
       "請依價格區間分成三類：低價股、中階股、高價股。",
       "台股價格區間建議：低價 50 元以下；中階 50 到 300 元；高價 300 元以上。美股可用美元區間近似：低價 50 美元以下；中階 50 到 300 美元；高價 300 美元以上。",
@@ -527,11 +530,14 @@ async function buildAiPicksPayload() {
       "新聞或市場資料請附來源名稱與日期；若價格可能已變動，請明確標示需要盤中再確認。"
     ].join("\n"),
     webSearchQueries: [
-      "台股 低價股 推薦 2026 AI 半導體 散熱 電源",
-      "台股 中價位 股票 2026 伺服器 AI 財報 營收",
-      "台股 高價股 2026 台積電 聯發科 AI 概念股",
-      "US stocks AI semiconductor cloud data center picks 2026 under 50 50 300 above 300",
-      "Taiwan stock market winners AI server cooling power PCB 2026"
+      "Yahoo股市 台股 推薦 個股 分析 AI 半導體 伺服器 2026",
+      "鉅亨網 台股 推薦 個股 分析 AI 伺服器 散熱 電源",
+      "MoneyDJ 台股 個股 推薦 法人 看好 半導體 AI",
+      "工商時報 經濟日報 台股 個股 分析 推薦 AI 伺服器",
+      "財訊 今周刊 Smart智富 台股 個股 推薦 低價 中價 高價",
+      "CMoney 台股 AI 概念股 法人 買超 推薦",
+      "Yahoo Finance US stocks AI semiconductor cloud data center analyst picks",
+      "Barron's CNBC MarketWatch AI semiconductor stock picks 2026"
     ],
     priceBuckets: [
       { label: "低價股", twd: "50 元以下", usd: "50 美元以下" },
@@ -559,7 +565,12 @@ function buildDeterministicAiPicksReport(payload, aiCommentary) {
   const lines = [
     "AI推薦股觀察報告",
     "",
-    "說明：以下名單不限定自選股。價格與區間由系統先抓行情資料驗證，AI 只做新聞與產業補充解讀。內容僅供研究，不構成投資建議。",
+    "說明：以下名單不限定自選股。價格與區間由系統先抓行情資料驗證，再綜合 AI 自選、Yahoo股市、鉅亨、MoneyDJ、工商時報、經濟日報、財訊/今周刊/Smart智富、CMoney、財經新聞台與公司公告等來源做補充解讀。內容僅供研究，不構成投資建議。",
+    "",
+    "來源綜合方式：",
+    "- 系統層：先抓候選股行情、技術分數與價格區間，避免錯放低價/中階/高價。",
+    "- AI 層：使用 web search 彙整新聞、雜誌、法人/市場觀點與產業催化因素。",
+    "- 風險層：若外部來源不足，仍只列為技術面候選，不視為市場共識。",
     ""
   ];
 
@@ -584,6 +595,7 @@ function buildDeterministicAiPicksReport(payload, aiCommentary) {
       lines.push(`   - 技術分數：${stock.score}，趨勢：${stock.trend}`);
       lines.push(`   - 主題：${stock.theme}`);
       lines.push(`   - 系統理由：${stock.summary}`);
+      lines.push(`   - 外部來源檢查：請參考下方 AI補充觀察；若未被多個新聞/雜誌/法人來源提及，視為技術面候選。`);
       lines.push(`   - 觀察條件：留意是否維持目前趨勢、成交量是否放大、以及近期新聞/財報是否支持題材延續。`);
       lines.push(`   - 主要風險：價格已可能變動，盤中需重新確認；題材股需注意消息面退燒與追高風險。`);
     });
@@ -1490,7 +1502,7 @@ const INDEX_HTML = `<!doctype html>
         <section class="grid layout">
           <div class="panel">
             <h2>AI推薦股</h2>
-            <div class="muted">不限定自選股，由 AI 搜尋最新市場資料後，分成低價、中階、高價三個區間給觀察名單。</div>
+            <div class="muted">不限定自選股。系統先驗證行情與價格區間，再綜合 AI 自選、Yahoo股市、鉅亨、MoneyDJ、工商時報、經濟日報、股市雜誌與財經新聞台分析，分成低價、中階、高價三個區間。</div>
             <div class="actions" style="margin:12px 0;">
               <button onclick="createAiPicksReport()">產生市場 AI 推薦股</button>
               <button class="secondary" onclick="createPortfolioReport()">產生自選股總覽</button>
