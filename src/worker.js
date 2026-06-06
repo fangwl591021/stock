@@ -952,10 +952,37 @@ const INDEX_HTML = `<!doctype html>
       gap: 16px;
     }
     h1 { margin: 0; font-size: 22px; letter-spacing: 0; }
-    main { max-width: 1280px; margin: 0 auto; padding: 20px; }
+    main { padding: 20px; }
+    .app-shell {
+      display: grid;
+      grid-template-columns: 300px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      background: #fff;
+      border-right: 1px solid var(--line);
+      padding: 18px;
+      z-index: 20;
+    }
+    .sidebar h1 { font-size: 21px; margin-bottom: 6px; }
+    .sidebar-actions {
+      display: grid;
+      gap: 8px;
+      margin: 16px 0;
+    }
+    .content {
+      min-width: 0;
+      max-width: 1320px;
+      width: 100%;
+      margin: 0 auto;
+    }
     .top-actions, .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .grid { display: grid; gap: 14px; }
-    .stats { grid-template-columns: repeat(6, minmax(120px, 1fr)); margin-bottom: 14px; }
+    .stats { grid-template-columns: 1fr 1fr; margin-bottom: 14px; }
     .layout { grid-template-columns: minmax(0, 1.3fr) minmax(360px, .7fr); align-items: start; }
     .panel, .stat {
       background: var(--panel);
@@ -1057,8 +1084,75 @@ const INDEX_HTML = `<!doctype html>
       text-align: center;
       background: #fff;
     }
+    .teacher-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .teacher-item {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #eef2f6;
+      color: var(--text);
+      text-align: left;
+    }
+    .teacher-item:hover { background: #dbe4ec; }
+    .teacher-item.primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, .28);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease;
+      z-index: 40;
+    }
+    .drawer-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .teacher-drawer {
+      position: fixed;
+      top: 0;
+      left: 300px;
+      width: min(520px, calc(100vw - 300px));
+      height: 100vh;
+      background: #fff;
+      border-right: 1px solid var(--line);
+      box-shadow: 16px 0 36px rgba(15, 23, 42, .18);
+      transform: translateX(-110%);
+      transition: transform .2s ease;
+      z-index: 50;
+      padding: 18px;
+      overflow-y: auto;
+    }
+    .teacher-drawer.open { transform: translateX(0); }
+    .drawer-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .drawer-head h2 { margin: 0 0 4px; }
     @media (max-width: 980px) {
+      .app-shell { grid-template-columns: 1fr; }
+      .sidebar {
+        position: static;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
       .stats, .layout, .detail { grid-template-columns: 1fr; }
+      .teacher-drawer {
+        left: 0;
+        width: min(92vw, 520px);
+      }
       form { grid-template-columns: 1fr; }
       header { align-items: flex-start; flex-direction: column; }
       table, thead, tbody, th, td, tr { display: block; }
@@ -1076,34 +1170,45 @@ const INDEX_HTML = `<!doctype html>
   </style>
 </head>
 <body>
-  <header>
-    <div>
+  <div class="app-shell">
+    <aside class="sidebar">
       <h1>股市分析平台</h1>
-      <div class="muted">技術面掃描、批次更新、AI 觀察報告。資料僅供研究，不構成投資建議。</div>
-    </div>
-    <div class="top-actions">
-      <button onclick="analyzeAll()">批次分析全部</button>
-      <button class="secondary" onclick="createPortfolioReport()">產生總覽 AI 報告</button>
-      <button class="secondary" onclick="createJensenReport()">更新黃仁勳追蹤</button>
-      <button class="secondary" onclick="loadDashboard()">重新整理</button>
-    </div>
-  </header>
-  <main>
-    <p class="status" id="status"></p>
+      <div class="muted">左側儀表板，右側顯示內容。資料僅供研究，不構成投資建議。</div>
 
-    <section class="grid stats" id="stats"></section>
-
-    <section class="panel" style="margin-bottom:14px;">
-      <h2>黃仁勳追蹤區</h2>
-      <div class="muted">追蹤黃仁勳最新新聞、公開行程、拜訪或互動過的廠家，以及 NVIDIA / AI 伺服器 / 散熱 / 電源 / PCB / 連接器 / 先進封裝相關概念股。</div>
-      <div class="actions" style="margin-top:12px;">
-        <button onclick="createJensenReport()">產生最新追蹤報告</button>
-        <button class="secondary" onclick="addJensenConceptStocks()">加入核心概念股到自選股</button>
+      <div class="sidebar-actions">
+        <button onclick="analyzeAll()">批次分析全部</button>
+        <button class="secondary" onclick="createPortfolioReport()">產生總覽 AI 報告</button>
+        <button class="secondary" onclick="loadDashboard()">重新整理</button>
       </div>
-      <div class="muted" style="margin-top:10px;">核心概念股種子：2330、2317、2382、3231、6669、2356、2376、2357、3017、3324、2421、2308、8046、3037、2368、3533、NVDA、TSM、SMCI、DELL、MSFT、GOOGL、AMZN、META。</div>
-    </section>
 
-    <section class="grid layout">
+      <section class="grid stats" id="stats"></section>
+
+      <section class="panel">
+        <h2>名人老師追蹤</h2>
+        <div class="muted">點選人物後，向右打開追蹤抽屜。</div>
+        <div class="teacher-list">
+          <button class="teacher-item primary" onclick="openTeacherDrawer('jensen')"><span>黃仁勳</span><span>›</span></button>
+          <button class="teacher-item" onclick="openTeacherDrawer('placeholder')"><span>XXX</span><span>›</span></button>
+        </div>
+      </section>
+    </aside>
+
+    <div class="drawer-backdrop" id="drawer-backdrop" onclick="closeTeacherDrawer()"></div>
+    <aside class="teacher-drawer" id="teacher-drawer">
+      <div class="drawer-head">
+        <div>
+          <h2 id="drawer-title">名人老師追蹤</h2>
+          <div class="muted" id="drawer-subtitle"></div>
+        </div>
+        <button class="secondary" onclick="closeTeacherDrawer()">關閉</button>
+      </div>
+      <div id="drawer-content"></div>
+    </aside>
+
+    <main class="content">
+      <p class="status" id="status"></p>
+
+      <section class="grid layout">
       <div class="panel">
         <h2>自選股工作台</h2>
         <form id="stock-form">
@@ -1136,7 +1241,8 @@ const INDEX_HTML = `<!doctype html>
         <div id="events"></div>
       </aside>
     </section>
-  </main>
+    </main>
+  </div>
 
   <script>
     let dashboard = null;
@@ -1207,14 +1313,57 @@ const INDEX_HTML = `<!doctype html>
       clearBusy();
     }
 
+    function openTeacherDrawer(key) {
+      const drawer = document.querySelector("#teacher-drawer");
+      const backdrop = document.querySelector("#drawer-backdrop");
+      const title = document.querySelector("#drawer-title");
+      const subtitle = document.querySelector("#drawer-subtitle");
+      const content = document.querySelector("#drawer-content");
+
+      if (key === "jensen") {
+        title.textContent = "黃仁勳";
+        subtitle.textContent = "NVIDIA、AI 供應鏈、拜訪廠家、概念股追蹤";
+        content.innerHTML =
+          '<div class="panel" style="margin-bottom:12px;">' +
+            '<h2>追蹤內容</h2>' +
+            '<div class="muted">追蹤黃仁勳最新新聞、公開行程、拜訪或互動過的廠家，以及 NVIDIA / AI 伺服器 / 散熱 / 電源 / PCB / 連接器 / 先進封裝相關概念股。</div>' +
+            '<div class="actions" style="margin-top:12px;">' +
+              '<button onclick="createJensenReport()">產生最新追蹤報告</button>' +
+              '<button class="secondary" onclick="addJensenConceptStocks()">加入核心概念股到自選股</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="panel">' +
+            '<h2>核心概念股種子</h2>' +
+            '<div class="muted">2330、2317、2382、3231、6669、2356、2376、2357、3017、3324、2421、2308、8046、3037、2368、3533、NVDA、TSM、SMCI、DELL、MSFT、GOOGL、AMZN、META。</div>' +
+          '</div>';
+      } else {
+        title.textContent = "XXX";
+        subtitle.textContent = "預留名人老師追蹤模板";
+        content.innerHTML =
+          '<div class="panel">' +
+            '<h2>尚未設定</h2>' +
+            '<div class="muted">這個位置預留給下一位名人老師。之後可接獨立新聞追蹤、拜訪廠家、概念股清單與 AI 報告。</div>' +
+          '</div>';
+      }
+
+      drawer.classList.add("open");
+      backdrop.classList.add("open");
+    }
+
+    function closeTeacherDrawer() {
+      document.querySelector("#teacher-drawer").classList.remove("open");
+      document.querySelector("#drawer-backdrop").classList.remove("open");
+    }
+
     async function createJensenReport() {
-      setBusy("更新黃仁勳追蹤區...");
+      setBusy("更新名人老師追蹤：黃仁勳...");
       const data = await api("/api/jensen-report", {
         method: "POST",
         body: "{}"
       });
       document.querySelector("#report").textContent = data.report;
-      document.querySelector("#ai-state").textContent = "黃仁勳追蹤 / 模型：" + data.model + " / web search：" + (data.usedWebSearch ? "已啟用" : "未啟用") + " / sources：" + (data.sources?.length || 0);
+      document.querySelector("#ai-state").textContent = "名人老師追蹤：黃仁勳 / 模型：" + data.model + " / web search：" + (data.usedWebSearch ? "已啟用" : "未啟用") + " / sources：" + (data.sources?.length || 0);
+      closeTeacherDrawer();
       clearBusy();
     }
 
