@@ -1125,31 +1125,15 @@ const INDEX_HTML = `<!doctype html>
       background: var(--accent);
       color: #fff;
     }
-    .drawer-backdrop { display: none; }
-    .teacher-drawer {
-      position: fixed;
-      top: 0;
-      left: 260px;
-      width: 280px;
-      height: 100vh;
-      background: #fff;
-      border-right: 1px solid var(--line);
-      box-shadow: 12px 0 28px rgba(15, 23, 42, .14);
-      transform: translateX(-102%);
-      transition: transform .2s ease;
-      z-index: 30;
-      padding: 18px;
-      overflow-y: auto;
+    .teacher-submenu {
+      display: none;
+      gap: 8px;
+      padding-left: 10px;
+      margin-top: -8px;
+      margin-bottom: 8px;
+      border-left: 3px solid var(--line);
     }
-    .teacher-drawer.open { transform: translateX(0); }
-    .drawer-head {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 14px;
-    }
-    .drawer-head h2 { margin: 0 0 4px; }
+    .teacher-submenu.open { display: grid; }
     @media (max-width: 980px) {
       .app-shell { grid-template-columns: 1fr; }
       .sidebar {
@@ -1159,11 +1143,6 @@ const INDEX_HTML = `<!doctype html>
         border-bottom: 1px solid var(--line);
       }
       .stats, .layout, .detail { grid-template-columns: 1fr; }
-      .teacher-drawer {
-        left: 0;
-        width: min(92vw, 360px);
-        z-index: 60;
-      }
       form { grid-template-columns: 1fr; }
       header { align-items: flex-start; flex-direction: column; }
       table, thead, tbody, th, td, tr { display: block; }
@@ -1188,22 +1167,14 @@ const INDEX_HTML = `<!doctype html>
 
       <div class="sidebar-actions">
         <button class="nav-button" id="nav-celebrity" onclick="showView('celebrity')"><span>名人專區</span><span>›</span></button>
+        <div class="teacher-submenu" id="teacher-submenu">
+          <button class="teacher-item primary" onclick="selectTeacher('jensen')"><span>黃仁勳</span><span>›</span></button>
+          <button class="teacher-item" onclick="selectTeacher('placeholder')"><span>XXX</span><span>›</span></button>
+        </div>
         <button class="nav-button active" id="nav-stocks" onclick="showView('stocks')"><span>自選股</span><span>›</span></button>
         <button class="nav-button" id="nav-ai-picks" onclick="showView('ai-picks')"><span>AI推薦股</span><span>›</span></button>
       </div>
       <div class="muted">資料僅供研究，不構成投資建議。</div>
-    </aside>
-
-    <div class="drawer-backdrop" id="drawer-backdrop" onclick="closeTeacherDrawer()"></div>
-    <aside class="teacher-drawer" id="teacher-drawer">
-      <div class="drawer-head">
-        <div>
-          <h2 id="drawer-title">名人老師追蹤</h2>
-          <div class="muted" id="drawer-subtitle"></div>
-        </div>
-        <button class="secondary" onclick="closeTeacherDrawer()">關閉</button>
-      </div>
-      <div id="drawer-content"></div>
     </aside>
 
     <main class="content">
@@ -1212,12 +1183,13 @@ const INDEX_HTML = `<!doctype html>
       <section class="view-section" id="view-celebrity">
         <section class="panel" style="margin-bottom:14px;">
           <h2>名人專區</h2>
-          <div class="muted">左側選單右邊會打開名人老師抽屜。選黃仁勳後，可追蹤新聞、拜訪廠家與 NVIDIA/AI 概念股。</div>
+          <div class="muted">左側會展開名人老師子選單。選黃仁勳後，可追蹤新聞、拜訪廠家與 NVIDIA/AI 概念股。</div>
         </section>
         <section class="grid layout">
           <div class="panel">
             <h2>追蹤結果</h2>
-            <div class="muted" id="celebrity-state">請先從左側抽屜選擇名人老師。</div>
+            <div class="muted" id="celebrity-state">請先從左側子選單選擇名人老師。</div>
+            <div class="actions" id="celebrity-actions" style="margin:12px 0;"></div>
             <div class="report" id="celebrity-report">尚未產生追蹤報告。</div>
           </div>
           <aside class="panel">
@@ -1325,9 +1297,9 @@ const INDEX_HTML = `<!doctype html>
       document.querySelector("#nav-" + view).classList.add("active");
 
       if (view === "celebrity") {
-        openTeacherDrawer("menu");
+        document.querySelector("#teacher-submenu").classList.add("open");
       } else {
-        closeTeacherDrawer();
+        document.querySelector("#teacher-submenu").classList.remove("open");
       }
     }
 
@@ -1375,52 +1347,26 @@ const INDEX_HTML = `<!doctype html>
       clearBusy();
     }
 
-    function openTeacherDrawer(key) {
-      const drawer = document.querySelector("#teacher-drawer");
-      const title = document.querySelector("#drawer-title");
-      const subtitle = document.querySelector("#drawer-subtitle");
-      const content = document.querySelector("#drawer-content");
-
-      if (key === "menu") {
-        title.textContent = "名人老師追蹤";
-        subtitle.textContent = "選擇一位名人老師";
-        content.innerHTML =
-          '<div class="teacher-list">' +
-            '<button class="teacher-item primary" onclick="openTeacherDrawer(\\'jensen\\')"><span>黃仁勳</span><span>›</span></button>' +
-            '<button class="teacher-item" onclick="openTeacherDrawer(\\'placeholder\\')"><span>XXX</span><span>›</span></button>' +
-          '</div>';
-      } else
+    function selectTeacher(key) {
+      showView("celebrity");
       if (key === "jensen") {
-        title.textContent = "黃仁勳";
-        subtitle.textContent = "NVIDIA、AI 供應鏈、拜訪廠家、概念股追蹤";
-        content.innerHTML =
-          '<div class="panel" style="margin-bottom:12px;">' +
-            '<h2>追蹤內容</h2>' +
-            '<div class="muted">追蹤黃仁勳最新新聞、公開行程、拜訪或互動過的廠家，以及 NVIDIA / AI 伺服器 / 散熱 / 電源 / PCB / 連接器 / 先進封裝相關概念股。</div>' +
-            '<div class="actions" style="margin-top:12px;">' +
-              '<button onclick="createJensenReport()">產生最新追蹤報告</button>' +
-              '<button class="secondary" onclick="addJensenConceptStocks()">加入核心概念股到自選股</button>' +
-            '</div>' +
-          '</div>' +
-          '<div class="panel">' +
-            '<h2>核心概念股種子</h2>' +
-            '<div class="muted">2330、2317、2382、3231、6669、2356、2376、2357、3017、3324、2421、2308、8046、3037、2368、3533、NVDA、TSM、SMCI、DELL、MSFT、GOOGL、AMZN、META。</div>' +
-          '</div>';
+        document.querySelector("#celebrity-state").textContent = "黃仁勳：NVIDIA、AI 供應鏈、拜訪廠家、概念股追蹤";
+        document.querySelector("#celebrity-report").innerHTML =
+          '追蹤內容：\\n' +
+          '- 黃仁勳最新新聞、公開行程、演講、媒體採訪\\n' +
+          '- 拜訪或互動過的台灣/全球供應鏈廠家\\n' +
+          '- NVIDIA / AI 伺服器 / 散熱 / 電源 / PCB / 連接器 / 先進封裝概念股\\n\\n' +
+          '可執行：\\n' +
+          '1. 產生最新追蹤報告\\n' +
+          '2. 加入核心概念股到自選股';
+        document.querySelector("#celebrity-actions").innerHTML =
+          '<button onclick="createJensenReport()">產生最新追蹤報告</button>' +
+          '<button class="secondary" onclick="addJensenConceptStocks()">加入核心概念股到自選股</button>';
       } else {
-        title.textContent = "XXX";
-        subtitle.textContent = "預留名人老師追蹤模板";
-        content.innerHTML =
-          '<div class="panel">' +
-            '<h2>尚未設定</h2>' +
-            '<div class="muted">這個位置預留給下一位名人老師。之後可接獨立新聞追蹤、拜訪廠家、概念股清單與 AI 報告。</div>' +
-          '</div>';
+        document.querySelector("#celebrity-state").textContent = "XXX：預留名人老師追蹤模板";
+        document.querySelector("#celebrity-report").textContent = "這個位置預留給下一位名人老師。之後可接獨立新聞追蹤、拜訪廠家、概念股清單與 AI 報告。";
+        document.querySelector("#celebrity-actions").innerHTML = "";
       }
-
-      drawer.classList.add("open");
-    }
-
-    function closeTeacherDrawer() {
-      document.querySelector("#teacher-drawer").classList.remove("open");
     }
 
     async function createJensenReport() {
