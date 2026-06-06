@@ -71,6 +71,10 @@ export default {
         return createJensenReport(env);
       }
 
+      if (url.pathname === "/api/ai-picks" && request.method === "POST") {
+        return createAiPicksReport(env);
+      }
+
       if (url.pathname === "/api/events" && request.method === "GET") {
         return getSystemEvents(env);
       }
@@ -366,6 +370,47 @@ async function createJensenReport(env) {
   });
 }
 
+async function createAiPicksReport(env) {
+  requireDb(env);
+
+  const apiKey = getOpenAIKey(env);
+  if (!apiKey) {
+    return jsonResponse({ error: "Cloudflare secret OPENAI_API_KEY 尚未設定或未部署到此 Worker" }, 400);
+  }
+
+  const model = env.OPENAI_MODEL || "gpt-4.1-mini";
+  const payload = await buildAiPicksPayload();
+  const aiResult = await callOpenAI(apiKey, model, payload, { useWebSearch: true });
+  const report = buildDeterministicAiPicksReport(payload, aiResult.report);
+
+  await env.DB.prepare(`
+    INSERT INTO ai_reports(scope, symbol, model, prompt_hash, report, source_json)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(
+    "ai_picks",
+    null,
+    model,
+    await digestText(JSON.stringify(payload).slice(0, 4096)),
+    report,
+    JSON.stringify({ payload, sources: aiResult.sources, usedWebSearch: aiResult.usedWebSearch })
+  ).run();
+
+  await logEvent(env, "ai_picks", "ok", "AI market-wide picks generated", {
+    model,
+    sources: aiResult.sources.length,
+    usedWebSearch: aiResult.usedWebSearch
+  });
+
+  return jsonResponse({
+    ok: true,
+    scope: "ai_picks",
+    model,
+    report,
+    sources: aiResult.sources,
+    usedWebSearch: aiResult.usedWebSearch
+  });
+}
+
 async function getAiReports(url, env) {
   requireDb(env);
   const scope = url.searchParams.get("scope");
@@ -432,6 +477,169 @@ function buildJensenReportPayload() {
     seedConceptStocks: JENSEN_CONCEPT_STOCKS
   };
 }
+
+async function buildAiPicksPayload() {
+  const candidates = [];
+  for (const item of AI_PICK_CANDIDATES) {
+    try {
+      const analysis = await analyzeStock(item.symbol, item.market);
+      candidates.push({
+        symbol: item.symbol,
+        market: item.market,
+        name: item.name,
+        theme: item.theme,
+        price: analysis.price,
+        changePercent: analysis.changePercent,
+        score: analysis.score,
+        trend: analysis.trend,
+        summary: analysis.summary,
+        bucket: getPriceBucket(analysis.price, item.market)
+      });
+    } catch (error) {
+      candidates.push({
+        symbol: item.symbol,
+        market: item.market,
+        name: item.name,
+        theme: item.theme,
+        error: error.message
+      });
+    }
+  }
+
+  const validCandidates = candidates.filter((item) => item.bucket);
+
+  return {
+    reportType: "market_wide_ai_stock_picks",
+    generatedAt: new Date().toISOString(),
+    instruction: [
+      "請用繁體中文產出「AI推薦股」觀察報告。",
+      "不要限定使用者目前自選股；但只能從 input.candidates 裡挑選股票，不得自行新增不在清單內的股票。",
+      "input.candidates 的 price 與 bucket 已由系統用行情資料驗證，請以這些欄位為準，不要自行猜股價或改分類。",
+      "請使用 web search 補充候選股的最新新聞、財報、產業趨勢與催化因素，但價格區間必須以 input.candidates 為準。",
+      "這不是個人化投資建議；請以研究觀察名單方式輸出，避免保證獲利或直接下買賣指令。",
+      "請依價格區間分成三類：低價股、中階股、高價股。",
+      "台股價格區間建議：低價 50 元以下；中階 50 到 300 元；高價 300 元以上。美股可用美元區間近似：低價 50 美元以下；中階 50 到 300 美元；高價 300 美元以上。",
+      "報告必須使用這三個精確標題：一、低價股；二、中階股；三、高價股。不得使用中價股等其他標題。",
+      "每檔股票必須放在 input.candidates.bucket 指定的區間；如果某區候選不足 5 檔，請列出可用候選並標示候選不足，不得拿其他區間股票補數。",
+      "每個區間最多列出 5 檔，依 score、趨勢、產業催化因素、風險報酬排序。每檔需包含：股票代號、市場、公司名稱、系統驗證價格、技術分數、推薦觀察理由、近期催化因素、主要風險、明天/短期觀察條件。",
+      "請特別關注 AI、半導體、伺服器、散熱、電源、航運、金融、電信、ETF、雲端與資料中心相關標的，但不要只列 AI 概念股。",
+      "請在最後列出：不納入名單但值得觀察的備選股，以及資料限制。",
+      "新聞或市場資料請附來源名稱與日期；若價格可能已變動，請明確標示需要盤中再確認。"
+    ].join("\n"),
+    webSearchQueries: [
+      "台股 低價股 推薦 2026 AI 半導體 散熱 電源",
+      "台股 中價位 股票 2026 伺服器 AI 財報 營收",
+      "台股 高價股 2026 台積電 聯發科 AI 概念股",
+      "US stocks AI semiconductor cloud data center picks 2026 under 50 50 300 above 300",
+      "Taiwan stock market winners AI server cooling power PCB 2026"
+    ],
+    priceBuckets: [
+      { label: "低價股", twd: "50 元以下", usd: "50 美元以下" },
+      { label: "中階股", twd: "50 到 300 元", usd: "50 到 300 美元" },
+      { label: "高價股", twd: "300 元以上", usd: "300 美元以上" }
+    ],
+    candidates: validCandidates,
+    failedCandidates: candidates.filter((item) => item.error)
+  };
+}
+
+function getPriceBucket(price, market) {
+  if (!Number.isFinite(price)) return "";
+  if (market === "us") {
+    if (price < 50) return "低價股";
+    if (price <= 300) return "中階股";
+    return "高價股";
+  }
+  if (price < 50) return "低價股";
+  if (price <= 300) return "中階股";
+  return "高價股";
+}
+
+function buildDeterministicAiPicksReport(payload, aiCommentary) {
+  const lines = [
+    "AI推薦股觀察報告",
+    "",
+    "說明：以下名單不限定自選股。價格與區間由系統先抓行情資料驗證，AI 只做新聞與產業補充解讀。內容僅供研究，不構成投資建議。",
+    ""
+  ];
+
+  for (const bucket of ["低價股", "中階股", "高價股"]) {
+    const candidates = payload.candidates
+      .filter((item) => item.bucket === bucket)
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .slice(0, 5);
+
+    const title = bucket === "低價股" ? "一、低價股" : bucket === "中階股" ? "二、中階股" : "三、高價股";
+    lines.push(title);
+
+    if (!candidates.length) {
+      lines.push("目前候選不足，先不硬湊名單。");
+      lines.push("");
+      continue;
+    }
+
+    candidates.forEach((stock, index) => {
+      lines.push(`${index + 1}. ${stock.name}（${stock.symbol}${stock.market === "us" ? " / US" : " / TW"}）`);
+      lines.push(`   - 系統驗證價格：${stock.price}`);
+      lines.push(`   - 技術分數：${stock.score}，趨勢：${stock.trend}`);
+      lines.push(`   - 主題：${stock.theme}`);
+      lines.push(`   - 系統理由：${stock.summary}`);
+      lines.push(`   - 觀察條件：留意是否維持目前趨勢、成交量是否放大、以及近期新聞/財報是否支持題材延續。`);
+      lines.push(`   - 主要風險：價格已可能變動，盤中需重新確認；題材股需注意消息面退燒與追高風險。`);
+    });
+
+    if (candidates.length < 5) {
+      lines.push(`   - 註：${bucket} 目前可用候選少於 5 檔，未跨區補數。`);
+    }
+    lines.push("");
+  }
+
+  if (payload.failedCandidates?.length) {
+    lines.push("資料抓取失敗候選");
+    payload.failedCandidates.slice(0, 8).forEach((item) => {
+      lines.push(`- ${item.symbol} ${item.name || ""}：${item.error}`);
+    });
+    lines.push("");
+  }
+
+  lines.push("AI補充觀察");
+  lines.push(aiCommentary || "AI 補充資料暫時不可用。");
+  return lines.join("\n");
+}
+
+const AI_PICK_CANDIDATES = [
+  { symbol: "2312", market: "tw", name: "金寶", theme: "電子代工/低價題材" },
+  { symbol: "2409", market: "tw", name: "友達", theme: "面板/景氣循環" },
+  { symbol: "3481", market: "tw", name: "群創", theme: "面板/景氣循環" },
+  { symbol: "2344", market: "tw", name: "華邦電", theme: "記憶體" },
+  { symbol: "2313", market: "tw", name: "華通", theme: "PCB" },
+  { symbol: "2603", market: "tw", name: "長榮", theme: "航運" },
+  { symbol: "2303", market: "tw", name: "聯電", theme: "晶圓代工/成熟製程" },
+  { symbol: "2881", market: "tw", name: "富邦金", theme: "金融" },
+  { symbol: "2882", market: "tw", name: "國泰金", theme: "金融" },
+  { symbol: "2412", market: "tw", name: "中華電", theme: "電信/防禦" },
+  { symbol: "2356", market: "tw", name: "英業達", theme: "AI 伺服器/ODM" },
+  { symbol: "2376", market: "tw", name: "技嘉", theme: "AI 伺服器/GPU" },
+  { symbol: "2368", market: "tw", name: "金像電", theme: "AI 伺服器 PCB" },
+  { symbol: "3037", market: "tw", name: "欣興", theme: "PCB/載板" },
+  { symbol: "2308", market: "tw", name: "台達電", theme: "電源/資料中心" },
+  { symbol: "2382", market: "tw", name: "廣達", theme: "AI 伺服器 ODM" },
+  { symbol: "3231", market: "tw", name: "緯創", theme: "AI 伺服器 ODM" },
+  { symbol: "3017", market: "tw", name: "奇鋐", theme: "散熱/液冷" },
+  { symbol: "3324", market: "tw", name: "雙鴻", theme: "散熱/液冷" },
+  { symbol: "2330", market: "tw", name: "台積電", theme: "先進製程/AI 晶片" },
+  { symbol: "2454", market: "tw", name: "聯發科", theme: "IC 設計/AI ASIC" },
+  { symbol: "NVDA", market: "us", name: "NVIDIA", theme: "AI GPU/加速運算" },
+  { symbol: "TSM", market: "us", name: "TSMC ADR", theme: "先進晶片製造" },
+  { symbol: "SMCI", market: "us", name: "Supermicro", theme: "AI 伺服器" },
+  { symbol: "AMD", market: "us", name: "AMD", theme: "AI GPU/CPU" },
+  { symbol: "AVGO", market: "us", name: "Broadcom", theme: "AI ASIC/網通" },
+  { symbol: "DELL", market: "us", name: "Dell", theme: "AI 伺服器" },
+  { symbol: "MSFT", market: "us", name: "Microsoft", theme: "雲端 AI" },
+  { symbol: "GOOGL", market: "us", name: "Alphabet", theme: "雲端 AI" },
+  { symbol: "AMZN", market: "us", name: "Amazon", theme: "AWS/AI 資料中心" },
+  { symbol: "META", market: "us", name: "Meta", theme: "AI 資本支出" }
+];
 
 const JENSEN_CONCEPT_STOCKS = [
   { symbol: "2330", market: "tw", name: "台積電", link: "NVIDIA GPU/AI 加速器主要晶圓代工與先進封裝供應鏈核心" },
@@ -1282,17 +1490,17 @@ const INDEX_HTML = `<!doctype html>
         <section class="grid layout">
           <div class="panel">
             <h2>AI推薦股</h2>
-            <div class="muted">根據目前自選股的技術分數、趨勢與 AI 報告，整理偏強、觀察、風險名單。</div>
+            <div class="muted">不限定自選股，由 AI 搜尋最新市場資料後，分成低價、中階、高價三個區間給觀察名單。</div>
             <div class="actions" style="margin:12px 0;">
-              <button onclick="createPortfolioReport()">產生 AI 推薦報告</button>
-              <button class="secondary" onclick="analyzeAll()">先批次分析全部</button>
+              <button onclick="createAiPicksReport()">產生市場 AI 推薦股</button>
+              <button class="secondary" onclick="createPortfolioReport()">產生自選股總覽</button>
             </div>
             <div id="ai-picks"></div>
           </div>
           <aside class="panel">
             <h2>AI推薦報告</h2>
-            <div class="muted" id="ai-pick-state">尚未產生推薦報告。</div>
-            <div class="report" id="ai-pick-report">按「產生 AI 推薦報告」後，這裡會顯示內容。</div>
+            <div class="muted" id="ai-pick-state">尚未產生市場推薦報告。</div>
+            <div class="report" id="ai-pick-report">按「產生市場 AI 推薦股」後，這裡會顯示低價 / 中階 / 高價三區間觀察名單。</div>
           </aside>
         </section>
       </section>
@@ -1372,6 +1580,18 @@ const INDEX_HTML = `<!doctype html>
       const targetState = currentView === "ai-picks" ? "#ai-pick-state" : "#ai-state";
       document.querySelector(targetReport).textContent = data.report;
       document.querySelector(targetState).textContent = "模型：" + data.model;
+      clearBusy();
+    }
+
+    async function createAiPicksReport() {
+      setBusy("產生市場 AI 推薦股...");
+      const data = await api("/api/ai-picks", {
+        method: "POST",
+        body: "{}"
+      });
+      showView("ai-picks");
+      document.querySelector("#ai-pick-report").textContent = data.report;
+      document.querySelector("#ai-pick-state").textContent = "市場全域推薦 / 模型：" + data.model + " / web search：" + (data.usedWebSearch ? "已啟用" : "未啟用") + " / sources：" + (data.sources?.length || 0);
       clearBusy();
     }
 
@@ -1531,9 +1751,13 @@ const INDEX_HTML = `<!doctype html>
       ).join("");
 
       document.querySelector("#ai-picks").innerHTML =
-        '<h2>偏強觀察</h2>' +
+        '<div class="panel" style="margin-bottom:12px;">' +
+          '<h2>推薦區間</h2>' +
+          '<div class="muted">低價：台股 50 元以下 / 美股 50 美元以下。中階：台股 50-300 元 / 美股 50-300 美元。高價：台股 300 元以上 / 美股 300 美元以上。</div>' +
+        '</div>' +
+        '<h2>目前自選股偏強參考</h2>' +
         '<table><thead><tr><th>股票</th><th>分數</th><th>理由</th><th>操作</th></tr></thead><tbody>' + leaderRows + '</tbody></table>' +
-        '<h2 style="margin-top:16px;">風險觀察</h2>' +
+        '<h2 style="margin-top:16px;">目前自選股風險參考</h2>' +
         '<table><thead><tr><th>股票</th><th>分數</th><th>理由</th><th>操作</th></tr></thead><tbody>' + riskRows + '</tbody></table>';
     }
 
