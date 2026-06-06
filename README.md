@@ -13,6 +13,7 @@
 - 批次分析全部自選股
 - 單股明細與近 90 日收盤線圖
 - AI 總覽報告與單股報告
+- AI 報告補充公司主要業務與最近市場新聞
 - 系統事件紀錄
 - Cloudflare scheduled trigger 自動分析
 
@@ -87,6 +88,15 @@ OPENAI_MODEL=gpt-4.1-mini
 ```
 
 若未設定 `OPENAI_MODEL`，Worker 預設使用 `gpt-4.1-mini`。
+
+AI 報告會透過 OpenAI Responses API 呼叫模型，並嘗試使用 `web_search` 工具補充：
+
+- 公司主要業務
+- 產業定位
+- 最近市場新聞，優先近 14 天；若資料不足，放寬到近 90 天
+- 新聞來源或日期
+
+若 web search 暫時不可用，系統會退回一般 AI 報告，並要求報告明確標示近期新聞未能即時查證。
 
 ## 排程
 

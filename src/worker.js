@@ -304,7 +304,7 @@ async function createAiReport(request, env) {
     : await buildPortfolioReportPayload(env);
 
   const model = env.OPENAI_MODEL || "gpt-4.1-mini";
-  const report = await callOpenAI(apiKey, model, payload);
+  const aiResult = await callOpenAI(apiKey, model, payload, { useWebSearch: true });
 
   await env.DB.prepare(`
     INSERT INTO ai_reports(scope, symbol, model, prompt_hash, report, source_json)
@@ -314,12 +314,12 @@ async function createAiReport(request, env) {
     symbol,
     model,
     await digestText(JSON.stringify(payload).slice(0, 4096)),
-    report,
-    JSON.stringify(payload)
+    aiResult.report,
+    JSON.stringify({ payload, sources: aiResult.sources, usedWebSearch: aiResult.usedWebSearch })
   ).run();
 
   await logEvent(env, "ai_report", "ok", `${scope}${symbol ? `:${symbol}` : ""}`, { model });
-  return jsonResponse({ ok: true, scope, symbol, model, report });
+  return jsonResponse({ ok: true, scope, symbol, model, report: aiResult.report, sources: aiResult.sources, usedWebSearch: aiResult.usedWebSearch });
 }
 
 async function getAiReports(url, env) {
@@ -358,7 +358,8 @@ async function buildPortfolioReportPayload(env) {
   return {
     reportType: "portfolio",
     generatedAt: new Date().toISOString(),
-    instruction: "請用繁體中文產出可操作但保守的股市觀察報告。不得宣稱保證獲利，不得直接叫使用者買賣。請分成：總覽、偏強名單、風險名單、明天觀察重點、資料限制。",
+    instruction: "請用繁體中文產出可操作但保守的股市觀察報告。請使用 web search 補充主要個股近期市場新聞與產業背景。近期新聞優先近 14 天，若資料不足可放寬到近 90 天，至少整理 3 則與清單股票或台股市場直接相關的新聞。不得宣稱保證獲利，不得直接叫使用者買賣。請分成：總覽、主要業務/產業背景、最近市場新聞、偏強名單、風險名單、明天觀察重點、資料限制。新聞請附來源名稱與日期，並說明和股價觀察的關聯。",
+    webSearchQueries: analyzed.slice(0, 8).map((stock) => `${stock.name || stock.symbol} ${stock.symbol} 股價 新聞 法說 營收 近期`),
     stocks: analyzed.map(compactStockForPrompt)
   };
 }
@@ -380,7 +381,12 @@ async function buildSymbolReportPayload(env, symbol) {
   return {
     reportType: "symbol",
     generatedAt: new Date().toISOString(),
-    instruction: "請用繁體中文產出單股觀察報告。不得宣稱保證獲利，不得直接叫使用者買賣。請分成：目前狀態、技術訊號、風險、明天觀察價位/條件、資料限制。",
+    instruction: "請用繁體中文產出單股觀察報告。請使用 web search 補充公司主要業務、營收/產業定位摘要，以及該股或該公司近期市場新聞。新聞優先近 14 天，若不足請放寬到近 90 天，至少列出 3 則可靠新聞或公告型資訊。不得宣稱保證獲利，不得直接叫使用者買賣。請分成：公司主要業務、最近市場新聞、目前技術狀態、風險、明天觀察價位/條件、資料限制。新聞請附來源名稱與日期，並說明和股價觀察的關聯。",
+    webSearchQueries: [
+      `${stock?.name || symbol} ${symbol} 公司主要業務`,
+      `${stock?.name || symbol} ${symbol} 股價 新聞 近期`,
+      `${stock?.name || symbol} ${symbol} 營收 法說 產業 新聞`
+    ],
     stock: compactStockForPrompt(stock || { symbol }),
     recentAnalyses: analysisRows.results || []
   };
@@ -408,30 +414,67 @@ function compactStockForPrompt(stock) {
   };
 }
 
-async function callOpenAI(apiKey, model, payload) {
-  const response = await fetch("https://api.openai.com/v1/responses", {
+async function callOpenAI(apiKey, model, payload, options = {}) {
+  const body = {
+    model,
+    input: [
+      {
+        role: "developer",
+        content: "你是保守、嚴謹的股票研究助理。只做資料解讀、公司背景整理、新聞摘要與風險提示，不提供個人化投資建議。輸出繁體中文，條列清楚。涉及近期新聞時要避免誇大，並標示來源或日期。"
+      },
+      {
+        role: "user",
+        content: JSON.stringify(payload)
+      }
+    ],
+    max_output_tokens: 2200
+  };
+
+  if (options.useWebSearch) {
+    body.tools = [
+      {
+        type: "web_search",
+        user_location: {
+          type: "approximate",
+          country: "TW",
+          timezone: "Asia/Taipei"
+        }
+      }
+    ];
+    body.tool_choice = "auto";
+    body.include = ["web_search_call.action.sources"];
+  }
+
+  let response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      model,
-      input: [
-        {
-          role: "developer",
-          content: "你是保守、嚴謹的股票研究助理。只做資料解讀與風險提示，不提供個人化投資建議。輸出繁體中文，條列清楚。"
-        },
-        {
-          role: "user",
-          content: JSON.stringify(payload)
-        }
-      ],
-      max_output_tokens: 1600
-    })
+    body: JSON.stringify(body)
   });
 
-  const data = await response.json();
+  let data = await response.json();
+  let usedWebSearch = Boolean(options.useWebSearch);
+
+  if (!response.ok && options.useWebSearch) {
+    delete body.tools;
+    delete body.tool_choice;
+    delete body.include;
+    body.input[0].content += " 如果無法使用 web search，請只根據輸入資料與一般公司背景知識撰寫，並明確標示近期新聞未能即時查證。";
+
+    response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+    data = await response.json();
+    usedWebSearch = false;
+  }
+
   if (!response.ok) {
     throw new Error(data.error?.message || `OpenAI request failed: ${response.status}`);
   }
@@ -441,7 +484,11 @@ async function callOpenAI(apiKey, model, payload) {
     throw new Error("OpenAI response missing output text");
   }
 
-  return text;
+  return {
+    report: text,
+    sources: extractSources(data),
+    usedWebSearch
+  };
 }
 
 function extractResponseText(data) {
@@ -456,6 +503,22 @@ function extractResponseText(data) {
     }
   }
   return parts.join("\n").trim();
+}
+
+function extractSources(data) {
+  const sources = [];
+  for (const item of data.output || []) {
+    if (item.type === "web_search_call") {
+      for (const source of item.action?.sources || []) {
+        sources.push({
+          title: source.title,
+          url: source.url,
+          source: source.source
+        });
+      }
+    }
+  }
+  return sources;
 }
 
 async function analyzeStock(symbol, market) {
