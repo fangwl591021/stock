@@ -955,8 +955,12 @@ const INDEX_HTML = `<!doctype html>
     main { padding: 20px; }
     .app-shell {
       display: grid;
-      grid-template-columns: 260px minmax(0, 1fr);
+      grid-template-columns: 260px 0 minmax(0, 1fr);
       min-height: 100vh;
+      transition: grid-template-columns .18s ease;
+    }
+    .app-shell.drawer-open {
+      grid-template-columns: 260px 340px minmax(0, 1fr);
     }
     .sidebar {
       position: sticky;
@@ -1125,22 +1129,47 @@ const INDEX_HTML = `<!doctype html>
       background: var(--accent);
       color: #fff;
     }
-    .teacher-submenu {
-      display: none;
-      gap: 8px;
-      padding-left: 10px;
-      margin-top: -8px;
-      margin-bottom: 8px;
-      border-left: 3px solid var(--line);
+    .teacher-drawer {
+      height: 100vh;
+      overflow: hidden;
+      background: #fff;
+      border-right: 1px solid var(--line);
+      box-shadow: 10px 0 26px rgba(15, 23, 42, .08);
+      position: sticky;
+      top: 0;
     }
-    .teacher-submenu.open { display: grid; }
+    .app-shell.drawer-open .teacher-drawer {
+      overflow-y: auto;
+    }
+    .teacher-drawer-inner {
+      width: 340px;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .drawer-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .drawer-head h2 { margin: 0 0 4px; }
     @media (max-width: 980px) {
-      .app-shell { grid-template-columns: 1fr; }
+      .app-shell,
+      .app-shell.drawer-open { grid-template-columns: 1fr; }
       .sidebar {
         position: static;
         height: auto;
         border-right: 0;
         border-bottom: 1px solid var(--line);
+      }
+      .teacher-drawer {
+        position: static;
+        height: auto;
+        display: none;
+      }
+      .app-shell.drawer-open .teacher-drawer {
+        display: block;
       }
       .stats, .layout, .detail { grid-template-columns: 1fr; }
       form { grid-template-columns: 1fr; }
@@ -1167,14 +1196,26 @@ const INDEX_HTML = `<!doctype html>
 
       <div class="sidebar-actions">
         <button class="nav-button" id="nav-celebrity" onclick="showView('celebrity')"><span>名人專區</span><span>›</span></button>
-        <div class="teacher-submenu" id="teacher-submenu">
-          <button class="teacher-item primary" onclick="selectTeacher('jensen')"><span>黃仁勳</span><span>›</span></button>
-          <button class="teacher-item" onclick="selectTeacher('placeholder')"><span>XXX</span><span>›</span></button>
-        </div>
         <button class="nav-button active" id="nav-stocks" onclick="showView('stocks')"><span>自選股</span><span>›</span></button>
         <button class="nav-button" id="nav-ai-picks" onclick="showView('ai-picks')"><span>AI推薦股</span><span>›</span></button>
       </div>
       <div class="muted">資料僅供研究，不構成投資建議。</div>
+    </aside>
+
+    <aside class="teacher-drawer" id="teacher-drawer">
+      <div class="teacher-drawer-inner">
+        <div class="drawer-head">
+          <div>
+            <h2>名人專區</h2>
+            <div class="muted">追蹤人物列表</div>
+          </div>
+          <button class="secondary" onclick="closeTeacherDrawer()">關閉</button>
+        </div>
+        <div class="teacher-list">
+          <button class="teacher-item primary" onclick="selectTeacher('jensen')"><span>黃仁勳</span><span>›</span></button>
+          <button class="teacher-item" onclick="selectTeacher('placeholder')"><span>XXX</span><span>›</span></button>
+        </div>
+      </div>
     </aside>
 
     <main class="content">
@@ -1297,9 +1338,9 @@ const INDEX_HTML = `<!doctype html>
       document.querySelector("#nav-" + view).classList.add("active");
 
       if (view === "celebrity") {
-        document.querySelector("#teacher-submenu").classList.add("open");
+        openTeacherDrawer();
       } else {
-        document.querySelector("#teacher-submenu").classList.remove("open");
+        closeTeacherDrawer();
       }
     }
 
@@ -1345,6 +1386,14 @@ const INDEX_HTML = `<!doctype html>
       document.querySelector(targetReport).textContent = data.report;
       document.querySelector(targetState).textContent = "模型：" + data.model + " / " + symbol;
       clearBusy();
+    }
+
+    function openTeacherDrawer() {
+      document.querySelector(".app-shell").classList.add("drawer-open");
+    }
+
+    function closeTeacherDrawer() {
+      document.querySelector(".app-shell").classList.remove("drawer-open");
     }
 
     function selectTeacher(key) {
