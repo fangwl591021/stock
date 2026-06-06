@@ -67,6 +67,10 @@ export default {
         return getAiReports(url, env);
       }
 
+      if (url.pathname === "/api/jensen-report" && request.method === "POST") {
+        return createJensenReport(env);
+      }
+
       if (url.pathname === "/api/events" && request.method === "GET") {
         return getSystemEvents(env);
       }
@@ -322,6 +326,46 @@ async function createAiReport(request, env) {
   return jsonResponse({ ok: true, scope, symbol, model, report: aiResult.report, sources: aiResult.sources, usedWebSearch: aiResult.usedWebSearch });
 }
 
+async function createJensenReport(env) {
+  requireDb(env);
+
+  const apiKey = getOpenAIKey(env);
+  if (!apiKey) {
+    return jsonResponse({ error: "Cloudflare secret OPENAI_API_KEY 尚未設定或未部署到此 Worker" }, 400);
+  }
+
+  const model = env.OPENAI_MODEL || "gpt-4.1-mini";
+  const payload = buildJensenReportPayload();
+  const aiResult = await callOpenAI(apiKey, model, payload, { useWebSearch: true });
+
+  await env.DB.prepare(`
+    INSERT INTO ai_reports(scope, symbol, model, prompt_hash, report, source_json)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(
+    "jensen",
+    null,
+    model,
+    await digestText(JSON.stringify(payload).slice(0, 4096)),
+    aiResult.report,
+    JSON.stringify({ payload, sources: aiResult.sources, usedWebSearch: aiResult.usedWebSearch })
+  ).run();
+
+  await logEvent(env, "jensen_report", "ok", "Jensen Huang tracker updated", {
+    model,
+    sources: aiResult.sources.length,
+    usedWebSearch: aiResult.usedWebSearch
+  });
+
+  return jsonResponse({
+    ok: true,
+    scope: "jensen",
+    model,
+    report: aiResult.report,
+    sources: aiResult.sources,
+    usedWebSearch: aiResult.usedWebSearch
+  });
+}
+
 async function getAiReports(url, env) {
   requireDb(env);
   const scope = url.searchParams.get("scope");
@@ -363,6 +407,61 @@ async function buildPortfolioReportPayload(env) {
     stocks: analyzed.map(compactStockForPrompt)
   };
 }
+
+function buildJensenReportPayload() {
+  return {
+    reportType: "jensen_huang_tracker",
+    generatedAt: new Date().toISOString(),
+    instruction: [
+      "請用繁體中文產出「黃仁勳追蹤區」報告。",
+      "請使用 web search 搜尋最新資料，優先近 30 天，不足則放寬到近 180 天。",
+      "請盡可能完整列出黃仁勳相關新聞、公開行程、演講、媒體採訪、供應鏈互動、拜訪或被報導互動過的公司/廠家。",
+      "廠家不限於實體工廠，也包含供應鏈公司、代工廠、ODM、伺服器廠、散熱、電源、連接器、PCB、記憶體、晶圓代工、雲端服務商、機器人/AI PC/車用合作方。",
+      "請列出概念股，優先台股，其次美股；每檔要給股票代號、市場、和黃仁勳/NVIDIA/AI 供應鏈的關聯理由。",
+      "請避免把未證實傳聞寫成事實；若是市場傳聞，請標示為傳聞或市場解讀。",
+      "請分成：1. 最新重點摘要；2. 黃仁勳最新新聞；3. 拜訪/互動過的廠家與關聯；4. NVIDIA/黃仁勳概念股清單；5. 需要明天追蹤的訊號；6. 資料限制。",
+      "每則新聞或拜訪紀錄請附來源名稱與日期。"
+    ].join("\n"),
+    webSearchQueries: [
+      "黃仁勳 最新 新聞 台灣 供應鏈 廠商 拜訪",
+      "黃仁勳 拜訪 廠商 台積電 鴻海 廣達 緯創 緯穎 英業達 技嘉 華碩",
+      "Jensen Huang latest news NVIDIA Taiwan suppliers visit",
+      "NVIDIA supply chain Taiwan stocks Jensen Huang concept stocks",
+      "黃仁勳 概念股 NVIDIA 伺服器 散熱 電源 連接器 PCB 台股"
+    ],
+    seedConceptStocks: JENSEN_CONCEPT_STOCKS
+  };
+}
+
+const JENSEN_CONCEPT_STOCKS = [
+  { symbol: "2330", market: "tw", name: "台積電", link: "NVIDIA GPU/AI 加速器主要晶圓代工與先進封裝供應鏈核心" },
+  { symbol: "2317", market: "tw", name: "鴻海", link: "AI 伺服器、GB200/GB300 相關組裝與系統整合市場焦點" },
+  { symbol: "2382", market: "tw", name: "廣達", link: "AI 伺服器 ODM 與雲端資料中心供應鏈" },
+  { symbol: "3231", market: "tw", name: "緯創", link: "AI 伺服器 ODM 與 NVIDIA 伺服器供應鏈" },
+  { symbol: "6669", market: "tw", name: "緯穎", link: "雲端資料中心與 AI 伺服器系統供應鏈" },
+  { symbol: "2356", market: "tw", name: "英業達", link: "伺服器與 AI PC/雲端硬體供應鏈" },
+  { symbol: "2376", market: "tw", name: "技嘉", link: "GPU、AI 伺服器與主機板相關產品" },
+  { symbol: "2357", market: "tw", name: "華碩", link: "AI PC、伺服器、GPU 板卡與邊緣 AI 產品" },
+  { symbol: "3017", market: "tw", name: "奇鋐", link: "AI 伺服器散熱模組與液冷題材" },
+  { symbol: "3324", market: "tw", name: "雙鴻", link: "AI 伺服器散熱與液冷概念股" },
+  { symbol: "2421", market: "tw", name: "建準", link: "風扇與散熱供應鏈" },
+  { symbol: "2308", market: "tw", name: "台達電", link: "AI 資料中心電源、散熱與能源管理" },
+  { symbol: "8046", market: "tw", name: "南電", link: "ABF 載板與高階封裝供應鏈" },
+  { symbol: "3037", market: "tw", name: "欣興", link: "載板、PCB 與 AI 高速運算供應鏈" },
+  { symbol: "2368", market: "tw", name: "金像電", link: "AI 伺服器 PCB 供應鏈" },
+  { symbol: "3533", market: "tw", name: "嘉澤", link: "高速連接器與伺服器平台供應鏈" },
+  { symbol: "6415", market: "tw", name: "矽力-KY", link: "電源管理 IC 與高效運算供應鏈題材" },
+  { symbol: "NVDA", market: "us", name: "NVIDIA", link: "黃仁勳創辦與領導公司，AI GPU/加速運算核心" },
+  { symbol: "TSM", market: "us", name: "TSMC ADR", link: "台積電 ADR，NVIDIA 先進晶片製造供應鏈核心" },
+  { symbol: "AMD", market: "us", name: "AMD", link: "AI GPU 競爭與加速運算市場比較標的" },
+  { symbol: "AVGO", market: "us", name: "Broadcom", link: "AI ASIC、網通與資料中心晶片供應鏈" },
+  { symbol: "SMCI", market: "us", name: "Supermicro", link: "AI 伺服器系統與 NVIDIA 平台合作供應鏈" },
+  { symbol: "DELL", market: "us", name: "Dell", link: "AI 伺服器與企業資料中心平台" },
+  { symbol: "MSFT", market: "us", name: "Microsoft", link: "雲端 AI 資本支出與 NVIDIA GPU 需求來源" },
+  { symbol: "GOOGL", market: "us", name: "Alphabet", link: "雲端 AI、資料中心與加速運算需求來源" },
+  { symbol: "AMZN", market: "us", name: "Amazon", link: "AWS AI 資料中心與加速運算需求來源" },
+  { symbol: "META", market: "us", name: "Meta", link: "AI 訓練/推論資料中心資本支出需求來源" }
+];
 
 async function buildSymbolReportPayload(env, symbol) {
   if (!symbol) {
@@ -985,6 +1084,7 @@ const INDEX_HTML = `<!doctype html>
     <div class="top-actions">
       <button onclick="analyzeAll()">批次分析全部</button>
       <button class="secondary" onclick="createPortfolioReport()">產生總覽 AI 報告</button>
+      <button class="secondary" onclick="createJensenReport()">更新黃仁勳追蹤</button>
       <button class="secondary" onclick="loadDashboard()">重新整理</button>
     </div>
   </header>
@@ -992,6 +1092,16 @@ const INDEX_HTML = `<!doctype html>
     <p class="status" id="status"></p>
 
     <section class="grid stats" id="stats"></section>
+
+    <section class="panel" style="margin-bottom:14px;">
+      <h2>黃仁勳追蹤區</h2>
+      <div class="muted">追蹤黃仁勳最新新聞、公開行程、拜訪或互動過的廠家，以及 NVIDIA / AI 伺服器 / 散熱 / 電源 / PCB / 連接器 / 先進封裝相關概念股。</div>
+      <div class="actions" style="margin-top:12px;">
+        <button onclick="createJensenReport()">產生最新追蹤報告</button>
+        <button class="secondary" onclick="addJensenConceptStocks()">加入核心概念股到自選股</button>
+      </div>
+      <div class="muted" style="margin-top:10px;">核心概念股種子：2330、2317、2382、3231、6669、2356、2376、2357、3017、3324、2421、2308、8046、3037、2368、3533、NVDA、TSM、SMCI、DELL、MSFT、GOOGL、AMZN、META。</div>
+    </section>
 
     <section class="grid layout">
       <div class="panel">
@@ -1095,6 +1205,54 @@ const INDEX_HTML = `<!doctype html>
       document.querySelector("#report").textContent = data.report;
       document.querySelector("#ai-state").textContent = "模型：" + data.model + " / " + symbol;
       clearBusy();
+    }
+
+    async function createJensenReport() {
+      setBusy("更新黃仁勳追蹤區...");
+      const data = await api("/api/jensen-report", {
+        method: "POST",
+        body: "{}"
+      });
+      document.querySelector("#report").textContent = data.report;
+      document.querySelector("#ai-state").textContent = "黃仁勳追蹤 / 模型：" + data.model + " / web search：" + (data.usedWebSearch ? "已啟用" : "未啟用") + " / sources：" + (data.sources?.length || 0);
+      clearBusy();
+    }
+
+    async function addJensenConceptStocks() {
+      const items = [
+        ["2382", "廣達", "tw", "黃仁勳/NVIDIA AI 伺服器概念股"],
+        ["3231", "緯創", "tw", "黃仁勳/NVIDIA AI 伺服器概念股"],
+        ["6669", "緯穎", "tw", "雲端資料中心與 AI 伺服器概念股"],
+        ["2356", "英業達", "tw", "伺服器與 AI PC 供應鏈"],
+        ["2376", "技嘉", "tw", "GPU 與 AI 伺服器概念股"],
+        ["2357", "華碩", "tw", "AI PC 與伺服器概念股"],
+        ["3017", "奇鋐", "tw", "AI 伺服器散熱概念股"],
+        ["3324", "雙鴻", "tw", "AI 伺服器散熱概念股"],
+        ["2421", "建準", "tw", "散熱風扇概念股"],
+        ["2308", "台達電", "tw", "AI 資料中心電源與散熱"],
+        ["8046", "南電", "tw", "ABF 載板概念股"],
+        ["3037", "欣興", "tw", "PCB/載板概念股"],
+        ["2368", "金像電", "tw", "AI 伺服器 PCB 概念股"],
+        ["3533", "嘉澤", "tw", "高速連接器概念股"],
+        ["NVDA", "NVIDIA", "us", "黃仁勳核心公司"],
+        ["TSM", "TSMC ADR", "us", "NVIDIA 先進晶片製造供應鏈"],
+        ["SMCI", "Supermicro", "us", "AI 伺服器系統概念股"],
+        ["DELL", "Dell", "us", "AI 伺服器與企業資料中心"],
+        ["MSFT", "Microsoft", "us", "雲端 AI 資本支出"],
+        ["GOOGL", "Alphabet", "us", "雲端 AI 資本支出"],
+        ["AMZN", "Amazon", "us", "AWS AI 資料中心"],
+        ["META", "Meta", "us", "AI 資料中心資本支出"]
+      ];
+
+      setBusy("加入黃仁勳/NVIDIA 核心概念股...");
+      for (const [symbol, name, market, note] of items) {
+        await api("/api/stocks", {
+          method: "POST",
+          body: JSON.stringify({ symbol, name, market, note })
+        });
+      }
+      await loadDashboard();
+      setStatus("核心概念股已加入，可再批次分析全部。");
     }
 
     async function removeStock(symbol) {

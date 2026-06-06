@@ -14,6 +14,7 @@
 - 單股明細與近 90 日收盤線圖
 - AI 總覽報告與單股報告
 - AI 報告補充公司主要業務與最近市場新聞
+- 黃仁勳追蹤區：最新新聞、拜訪/互動廠家、NVIDIA/AI 概念股
 - 系統事件紀錄
 - Cloudflare scheduled trigger 自動分析
 
@@ -121,6 +122,7 @@ crons = ["10 23 * * 1-5"]
 - `GET /api/candles/:symbol`
 - `POST /api/ai-report`
 - `GET /api/ai-report`
+- `POST /api/jensen-report`
 - `GET /api/events`
 
 ## 注意
