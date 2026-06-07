@@ -1357,8 +1357,12 @@ const INDEX_HTML = `<!doctype html>
       box-shadow: 10px 0 26px rgba(15, 23, 42, .08);
       position: sticky;
       top: 0;
+      display: none;
+      pointer-events: none;
     }
     .app-shell.drawer-open .teacher-drawer {
+      display: block;
+      pointer-events: auto;
       overflow-y: auto;
     }
     .teacher-drawer-inner {
