@@ -1218,14 +1218,14 @@ const INDEX_HTML = `<!doctype html>
     }
     .content {
       min-width: 0;
-      max-width: 1320px;
       width: 100%;
-      margin: 0 auto;
+      margin: 0;
     }
     .top-actions, .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .grid { display: grid; gap: 14px; }
+    .grid > * { min-width: 0; }
     .stats { grid-template-columns: repeat(6, minmax(120px, 1fr)); margin-bottom: 14px; }
-    .layout { grid-template-columns: minmax(0, 1fr) 420px; align-items: start; }
+    .layout { grid-template-columns: minmax(0, 1.35fr) minmax(420px, .65fr); align-items: start; }
     .view-section { display: none; }
     .view-section.active { display: block; }
     .panel, .stat {
