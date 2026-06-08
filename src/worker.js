@@ -1226,6 +1226,7 @@ const INDEX_HTML = `<!doctype html>
     .grid > * { min-width: 0; }
     .stats { grid-template-columns: repeat(6, minmax(120px, 1fr)); margin-bottom: 14px; }
     .layout { grid-template-columns: minmax(0, 1.35fr) minmax(420px, .65fr); align-items: start; }
+    .ai-picks-layout { grid-template-columns: minmax(0, 1fr); }
     .view-section { display: none; }
     .view-section.active { display: block; }
     .panel, .stat {
@@ -1503,7 +1504,7 @@ const INDEX_HTML = `<!doctype html>
 
       <section class="view-section" id="view-ai-picks">
         <section class="grid stats" id="ai-pick-stats"></section>
-        <section class="grid layout">
+        <section class="grid ai-picks-layout">
           <div class="panel">
             <h2>AI推薦股</h2>
             <div class="muted">不限定自選股。系統先驗證行情與價格區間，再綜合 AI 自選、Yahoo股市、鉅亨、MoneyDJ、工商時報、經濟日報、股市雜誌與財經新聞台分析，分成低價、中階、高價三個區間。</div>
@@ -1512,12 +1513,10 @@ const INDEX_HTML = `<!doctype html>
               <button class="secondary" onclick="createPortfolioReport()">產生自選股總覽</button>
             </div>
             <div id="ai-picks"></div>
-          </div>
-          <aside class="panel">
-            <h2>AI推薦報告</h2>
+            <h2 style="margin-top:16px;">AI推薦報告</h2>
             <div class="muted" id="ai-pick-state">尚未產生市場推薦報告。</div>
             <div class="report" id="ai-pick-report">按「產生市場 AI 推薦股」後，這裡會顯示低價 / 中階 / 高價三區間觀察名單。</div>
-          </aside>
+          </div>
         </section>
       </section>
     </main>
