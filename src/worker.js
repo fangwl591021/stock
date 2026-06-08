@@ -1232,8 +1232,9 @@ const INDEX_HTML = `<!doctype html>
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
+      min-width: 0;
     }
-    .panel { padding: 16px; }
+    .panel { padding: 16px; overflow: hidden; }
     .stat { padding: 14px; }
     .stat .label { color: var(--muted); font-size: 12px; }
     .stat .value { font-size: 24px; font-weight: 700; margin-top: 5px; }
@@ -1272,7 +1273,15 @@ const INDEX_HTML = `<!doctype html>
     button.danger { background: #fee4e2; color: var(--red); }
     button.danger:hover { background: #fecdca; }
     button:disabled { opacity: .6; cursor: wait; }
-    table { width: 100%; border-collapse: collapse; }
+    #stocks, #ai-picks, #detail {
+      max-width: 100%;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      min-width: 860px;
+      border-collapse: collapse;
+    }
     th, td {
       border-bottom: 1px solid var(--line);
       padding: 10px 8px;
@@ -1399,6 +1408,7 @@ const INDEX_HTML = `<!doctype html>
       form { grid-template-columns: 1fr; }
       header { align-items: flex-start; flex-direction: column; }
       table, thead, tbody, th, td, tr { display: block; }
+      table { min-width: 0; }
       thead { display: none; }
       tr { border-bottom: 1px solid var(--line); padding: 10px 0; }
       td { border-bottom: 0; padding: 5px 0; }
